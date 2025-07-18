@@ -109,6 +109,11 @@ export class EventHandler {
         return;
       }
 
+      // 退出したのがBot自身の場合は何もしない
+      if (oldState.member?.id === this.client.user?.id && !newState.channelId) {
+        return;
+      }
+
       const nonBot = (channel.members as Collection<string, GuildMember>).filter(
         (m) => !m.user.bot
       );

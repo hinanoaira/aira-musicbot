@@ -61,7 +61,7 @@ export class MessageHandler {
   private async handleMessage(message: WorkerMessage): Promise<void> {
     switch (message.event) {
       case "leave":
-        await this.handleLeave();
+        this.handleLeave();
         break;
 
       case "play":
@@ -87,9 +87,9 @@ export class MessageHandler {
   /**
    * ボイスチャンネルから退出します。
    */
-  private async handleLeave(): Promise<void> {
-    await this.connectionManager.disconnect();
+  private handleLeave(): void {
     this.eventHandler.setLeave(true);
+    this.connectionManager.disconnect();
   }
 
   /**
@@ -108,7 +108,6 @@ export class MessageHandler {
    */
   private async handleSkip(): Promise<void> {
     this.audioManager.stop();
-    parentPort?.postMessage({ event: "requestNext" });
   }
 
   /**

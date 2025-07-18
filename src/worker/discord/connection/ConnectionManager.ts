@@ -43,8 +43,7 @@ export class ConnectionManager {
   /**
    * 音声接続を切断します。
    */
-  async disconnect(): Promise<void> {
-    await this.audioManager.killFfmpegProcess();
+  disconnect(): void {
     this.audioManager.stop();
 
     const connection = getVoiceConnection(this.guild.id);
