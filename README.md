@@ -38,7 +38,29 @@ src/
 │   └── youtubeService.ts       # YouTube連携
 ├── worker/
 │   ├── discord/                # Discord再生ワーカー
+│   │   ├── index.ts            # ワーカーメインファイル
+│   │   ├── DiscordPlayWorker.ts # Discord再生ワーカー本体
+│   │   ├── MessageHandler.ts   # メッセージハンドラー
+│   │   ├── types.ts            # Discord関連型定義
+│   │   ├── audio/
+│   │   │   └── AudioManager.ts # オーディオ再生管理
+│   │   ├── connection/
+│   │   │   └── ConnectionManager.ts # 接続管理
+│   │   ├── events/
+│   │   │   └── EventHandler.ts # イベント処理
+│   │   └── utils/
+│   │       └── channelUtils.ts # チャンネル操作ユーティリティ
 │   └── library/                # ライブラリ解析ワーカー
+│       ├── index.ts            # ワーカーメインファイル
+│       ├── LibraryParser.ts    # ライブラリ解析器
+│       ├── LibraryParserWorker.ts # ライブラリ解析ワーカー本体
+│       ├── types.ts            # ライブラリ関連型定義
+│       ├── parsers/
+│       │   └── XmlParser.ts    # XML解析器
+│       ├── processors/
+│       │   └── TrackProcessor.ts # トラック情報処理
+│       └── utils/
+│           └── PathConverter.ts # パス変換ユーティリティ
 ├── config/
 │   └── index.ts                # 設定ファイル
 └── types/
@@ -151,7 +173,7 @@ npm start
 
 ## ライセンス
 
-MIT License
+This project is private.
 
 ## 貢献
 
