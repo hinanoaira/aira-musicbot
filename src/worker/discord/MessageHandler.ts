@@ -114,12 +114,12 @@ export class MessageHandler {
    * シャットダウンを処理します。
    */
   private async handleShutdown(): Promise<void> {
-    await this.audioManager.killFfmpegProcess();
-    this.client.destroy();
     parentPort?.postMessage({
       event: "log",
       message: "Worker is shutting down...",
     });
+    await this.audioManager.killFfmpegProcess();
+    await this.client.destroy();
     process.exit(0);
   }
 }

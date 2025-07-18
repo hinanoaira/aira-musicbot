@@ -70,10 +70,13 @@ export class EventHandler {
         message: "Disconnected => cleanup",
       });
       connection.destroy();
-      parentPort?.postMessage({ event: "disconnect" });
     });
 
     connection.on(VoiceConnectionStatus.Destroyed, () => {
+      parentPort?.postMessage({
+        event: "log",
+        message: "Connection Destroyed",
+      });
       parentPort?.postMessage({ event: "disconnect" });
     });
   }
