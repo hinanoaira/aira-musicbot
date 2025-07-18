@@ -65,13 +65,23 @@ export class ApiServer {
     return guildId;
   }
 
-  private makeQueueArray(st: GuildState | undefined | null): QueueItem[] {
+  private async makeQueueArray(st: GuildState | undefined | null): Promise<QueueItem[]> {
     const arr: QueueItem[] = [];
     if (!st) return arr;
 
     let idx = 0;
     if (st.currentTrack) {
       for (const t of st.currentTrack) {
+        let duration: number | undefined;
+
+        try {
+          const filePath = path.resolve(__dirname, "../", t._relativePath);
+          const metadata = await parseFile(filePath);
+          duration = metadata.format.duration;
+        } catch (error) {
+          console.warn(`[API Server] Could not get duration for ${t._relativePath}:`, error);
+        }
+
         arr.push({
           index: idx++,
           title: (t["Name"] as string) || "",
@@ -79,11 +89,22 @@ export class ApiServer {
           albumArtist: (t["アルバムアーティスト"] as string) || (t["アーティスト"] as string) || "",
           artist: (t["アーティスト"] as string) || "",
           isCurrent: true,
+          duration,
         });
       }
     }
 
     for (const t of st.requestQueue) {
+      let duration: number | undefined;
+
+      try {
+        const filePath = path.resolve(__dirname, "../", t._relativePath);
+        const metadata = await parseFile(filePath);
+        duration = metadata.format.duration;
+      } catch (error) {
+        console.warn(`[API Server] Could not get duration for ${t._relativePath}:`, error);
+      }
+
       arr.push({
         index: idx++,
         title: (t["Name"] as string) || "",
@@ -91,6 +112,7 @@ export class ApiServer {
         albumArtist: (t["アルバムアーティスト"] as string) || (t["アーティスト"] as string) || "",
         artist: (t["アーティスト"] as string) || "",
         isCurrent: false,
+        duration,
       });
     }
 
@@ -98,11 +120,12 @@ export class ApiServer {
   }
 
   private setupRoutes() {
-    this.app.get("/queue", (req, res) => {
+    this.app.get("/queue", async (req, res) => {
       const guildId = this.extractGuildId(req, res);
       if (!guildId) return;
       const st = this.getGuildState(guildId);
-      res.json(this.makeQueueArray(st));
+      const queueData = await this.makeQueueArray(st);
+      res.json(queueData);
     });
 
     this.app.get("/artist", (req, res) => {

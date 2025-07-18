@@ -29,6 +29,8 @@ export interface GuildState {
   currentTrack: TrackInfo[] | null;
   requestQueue: TrackInfo[];
   worker: Worker;
+  playbackStartTime?: number;
+  currentTrackDuration?: number;
 }
 
 export interface QueueItem {
@@ -38,4 +40,13 @@ export interface QueueItem {
   albumArtist: string;
   artist: string;
   isCurrent: boolean;
+  duration?: number;
+}
+
+export interface PlaybackStatus {
+  guildId: string;
+  isPlaying: boolean;
+  currentTime: number;
+  totalTime: number;
+  currentTrack?: QueueItem;
 }

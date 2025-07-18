@@ -14,7 +14,8 @@ import { Worker } from "worker_threads";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { GuildState } from "../types/index.js";
+import { parseFile } from "music-metadata";
+import { GuildState, TrackInfo } from "../types/index.js";
 import { getRandomItem, sequenceTracks } from "../services/musicService.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -99,10 +100,28 @@ export class DiscordBot {
     this.client.login(token);
   }
 
+  private async calculateTrackDuration(tracks: TrackInfo[]): Promise<number> {
+    if (tracks.length === 0) return 0;
+
+    let totalDuration = 0;
+    for (const track of tracks) {
+      try {
+        const filePath = path.resolve(__dirname, "../", track._relativePath);
+        const metadata = await parseFile(filePath);
+        if (metadata.format.duration) {
+          totalDuration += metadata.format.duration;
+        }
+      } catch (error) {
+        console.warn(`[Discord Bot] Could not get duration for ${track._relativePath}:`, error);
+      }
+    }
+    return totalDuration;
+  }
+
   private setupWorkerEvents(state: GuildState, guildId: string, guildName?: string) {
     const worker = state.worker;
 
-    worker.on("message", (message) => {
+    worker.on("message", async (message) => {
       if (message.event === "requestNext") {
         if (state.requestQueue.length > 0) {
           const tracks = sequenceTracks(state.requestQueue.shift()!);
@@ -111,6 +130,8 @@ export class DiscordBot {
             state.requestQueue.shift();
           }
           state.currentTrack = tracks;
+          state.playbackStartTime = Date.now();
+          state.currentTrackDuration = await this.calculateTrackDuration(tracks);
           this.notifyQueueUpdate(guildId);
           worker.postMessage({ event: "play", data: tracks });
           return;
@@ -120,12 +141,16 @@ export class DiscordBot {
         if (randItem) {
           const tracks = sequenceTracks(randItem);
           state.currentTrack = tracks;
+          state.playbackStartTime = Date.now();
+          state.currentTrackDuration = await this.calculateTrackDuration(tracks);
           this.notifyQueueUpdate(guildId);
           worker.postMessage({ event: "play", data: tracks });
           return;
         }
 
         state.currentTrack = null;
+        state.playbackStartTime = undefined;
+        state.currentTrackDuration = undefined;
         worker.postMessage({ event: "leave" });
         return;
       } else if (message.event === "disconnect") {

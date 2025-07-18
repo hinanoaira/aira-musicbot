@@ -12,8 +12,10 @@ export class NotificationService {
     this.webSocketService = webSocketService;
   }
 
-  public notifyQueueUpdate(guildId: string): void {
-    this.webSocketService?.notifyQueueUpdate(guildId);
+  public async notifyQueueUpdate(guildId: string): Promise<void> {
+    if (this.webSocketService) {
+      await this.webSocketService.notifyQueueUpdate(guildId);
+    }
   }
 }
 
