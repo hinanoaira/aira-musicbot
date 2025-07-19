@@ -15,6 +15,61 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * ffmpegを使用して音声ファイルを0dBまで正規化します。
+ * @param filePath 正規化する音声ファイルのパス
+ */
+async function normalizeAudio(filePath: string): Promise<void> {
+  const tempFile = filePath + ".temp.wav";
+
+  return new Promise<void>((resolve, reject) => {
+    console.log(`[ffmpeg] Normalizing audio: ${filePath}`);
+
+    // ffmpegで音量を正規化（-af volumedetect で最大音量を検出し、-af volume で増幅）
+    const ffmpeg = spawn(
+      "ffmpeg",
+      [
+        "-i",
+        filePath,
+        "-af",
+        "loudnorm=I=-23:TP=-2:LRA=7",
+        "-y", // 既存ファイルを上書き
+        tempFile,
+      ],
+      {
+        stdio: "ignore",
+      }
+    );
+
+    ffmpeg.on("close", (code: number) => {
+      if (code === 0) {
+        // 正規化が成功したら元ファイルを置き換え
+        try {
+          fs.unlinkSync(filePath);
+          fs.renameSync(tempFile, filePath);
+          resolve();
+        } catch (err) {
+          reject(new Error(`Failed to replace normalized file: ${err}`));
+        }
+      } else {
+        // 失敗した場合は一時ファイルを削除
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+        reject(new Error(`ffmpeg exited with code ${code}`));
+      }
+    });
+
+    ffmpeg.on("error", (err) => {
+      // エラーが発生した場合は一時ファイルを削除
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+      reject(err);
+    });
+  });
+}
+
+/**
  * YouTubeのURLをTrackInfoに変換し、yt-dlpでwav形式にダウンロードします。
  * @param url YouTube動画のURL
  * @returns TrackInfo または null
@@ -52,6 +107,15 @@ export async function youtubeUrlToTrackInfo(url: string): Promise<TrackInfo | nu
     } catch (err) {
       console.error("[yt-dlp] Download failed:", err);
       return null;
+    }
+
+    // ダウンロード完了後、音量を0dBまで正規化
+    try {
+      await normalizeAudio(outputFile);
+      console.log(`[Audio Normalization] Completed for: ${outputFile}`);
+    } catch (err) {
+      console.error("[Audio Normalization] Failed:", err);
+      // 正規化に失敗してもファイルは使用可能なので処理を続行
     }
   }
 

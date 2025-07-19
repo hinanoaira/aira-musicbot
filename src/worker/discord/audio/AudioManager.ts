@@ -17,6 +17,11 @@ export class AudioManager {
   private audioPlayer: AudioPlayer;
   private metadata: ResourceMetadata | null = null;
 
+  // バッファリング設定
+  private readonly BUFFER_SIZE = 100 * 1024 * 1024;
+  private readonly PROBE_SIZE = 10 * 1024 * 1024;
+  private readonly ANALYZE_DURATION = 5000000;
+
   /**
    * AudioManager のインスタンスを作成します。
    */
@@ -51,13 +56,11 @@ export class AudioManager {
             proc.once("exit", () => resolve());
             proc.once("error", (error) => reject(error));
 
-            // まずSIGTERMで終了を試行
             if (!proc.kill("SIGTERM")) {
               reject(new Error("Failed to send SIGTERM"));
             }
           }),
           new Promise<void>((_, reject) => {
-            // 10秒でタイムアウト
             setTimeout(() => reject(new Error("Process kill timeout")), 10000);
           }),
         ]);
@@ -67,7 +70,6 @@ export class AudioManager {
           message: "FFMPEG process terminated gracefully",
         });
       } catch (error) {
-        // SIGTERMで終了しない場合はSIGKILLで強制終了
         parentPort?.postMessage({
           event: "log",
           message: `SIGTERM failed (${error}), trying SIGKILL...`,
@@ -84,7 +86,6 @@ export class AudioManager {
               }
             }),
             new Promise<void>((_, reject) => {
-              // 10秒でタイムアウト
               setTimeout(() => reject(new Error("Force kill timeout")), 10000);
             }),
           ]);
@@ -114,10 +115,36 @@ export class AudioManager {
     }
 
     const args = this.buildFfmpegArgs(trackObj, bitrate);
-    const ffmpegProcess = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "ignore"] });
+
+    // HDDアクセス待ちを軽減するためのプロセス設定
+    const ffmpegProcess = spawn("ffmpeg", args, {
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsVerbatimArguments: true,
+      env: {
+        ...process.env,
+        FFREPORT: "level=16",
+      },
+    });
+
+    ffmpegProcess.on("error", (error) => {
+      parentPort?.postMessage({
+        event: "error",
+        error: `FFMPEG process error: ${error.message}`,
+      });
+    });
+
+    ffmpegProcess.on("exit", (code, signal) => {
+      if (code !== 0 && code !== null) {
+        parentPort?.postMessage({
+          event: "error",
+          error: `FFMPEG process exited with code ${code}, signal ${signal}`,
+        });
+      }
+    });
 
     const resource = createAudioResource(ffmpegProcess.stdout, {
       inputType: StreamType.OggOpus,
+      inlineVolume: false,
     });
 
     this.audioPlayer.play(resource);
@@ -127,7 +154,6 @@ export class AudioManager {
       ffmpegProcess,
     };
   }
-
   /**
    * FFMPEGの引数を生成します。
    * @param trackObj 再生するトラック情報の配列
@@ -137,6 +163,45 @@ export class AudioManager {
   private buildFfmpegArgs(trackObj: TrackInfo[], bitrate: number): string[] {
     const args: string[] = [];
 
+    // HDDアクセス待ちを軽減するためのバッファリング設定
+    args.push(
+      "-fflags",
+      "+genpts+igndts",
+      "-max_delay",
+      "5000000",
+      "-rtbufsize",
+      `${this.BUFFER_SIZE / (1024 * 1024)}M`
+    );
+
+    // OS別の最適化設定
+    if (process.platform === "linux") {
+      args.push(
+        "-thread_queue_size",
+        "4096",
+        "-analyzeduration",
+        "10000000",
+        "-probesize",
+        "20000000"
+      );
+    } else if (process.platform === "win32") {
+      args.push(
+        "-thread_queue_size",
+        "2048",
+        "-analyzeduration",
+        this.ANALYZE_DURATION.toString(),
+        "-probesize",
+        this.PROBE_SIZE.toString()
+      );
+    } else {
+      // macOS等のデフォルト設定
+      args.push(
+        "-analyzeduration",
+        this.ANALYZE_DURATION.toString(),
+        "-probesize",
+        this.PROBE_SIZE.toString()
+      );
+    }
+
     // 入力ファイルを追加
     trackObj.forEach((track) => {
       args.push("-i", track._relativePath.slice(3));
@@ -144,20 +209,15 @@ export class AudioManager {
 
     // フィルターとマッピングを設定
     if (trackObj.length === 1) {
-      args.push("-af", "volume=-10dB", "-map", "0:a");
+      args.push("-af", "volume=-20dB", "-map", "0:a");
     } else {
       const filter =
         trackObj.map((_, index) => `[${index}:a:0]`).join("") +
-        `concat=n=${trackObj.length}:v=0:a=1[outa];[outa]volume=-10dB[out]`;
+        `concat=n=${trackObj.length}:v=0:a=1[outa];[outa]volume=-20dB[out]`;
       args.push("-filter_complex", filter, "-map", "[out]");
     }
 
-    parentPort?.postMessage({
-      event: "log",
-      message: `${JSON.stringify(args)}`,
-    });
-
-    // エンコーディング設定
+    // エンコーディング設定（バッファリング強化）
     const frameDuration = 20;
     args.push(
       "-c:a",
@@ -170,6 +230,12 @@ export class AudioManager {
       "on",
       "-frame_duration",
       `${frameDuration}`,
+      "-bufsize",
+      `${bitrate * 2}`,
+      "-maxrate",
+      `${bitrate * 1.5}`,
+      "-avoid_negative_ts",
+      "make_zero",
       "-f",
       "opus",
       "pipe:1"
