@@ -9,7 +9,7 @@
               if (isDevelopment && fs.existsSync(tsWorkerFile)) {管理を行います。
  */
 
-import { Client, Events, GatewayIntentBits, GuildMember } from "discord.js";
+import { Client, Events, GatewayIntentBits, GuildMember, MessageFlags } from "discord.js";
 import { Worker } from "worker_threads";
 import path from "path";
 import fs from "fs";
@@ -50,7 +50,10 @@ export class DiscordBot {
       if (commandName === "join") {
         const memberVC = (interaction.member as GuildMember)?.voice?.channel;
         if (!memberVC) {
-          await interaction.reply("ボイスチャンネルに参加してから呼び出してください。");
+          await interaction.reply({
+            content: "ボイスチャンネルに参加してから実行してください。",
+            flags: MessageFlags.Ephemeral,
+          });
           return;
         }
 
@@ -87,13 +90,23 @@ export class DiscordBot {
         console.log(
           `[${interaction.guild?.name}] Joining VC: ${memberVC.name} (PlayingCount: ${this.guildStateMap.size})`
         );
-        await interaction.reply("ボイスチャンネルに参加しました。");
+        await interaction.reply({
+          content: "ボイスチャンネルに参加しました。",
+        });
+        setTimeout(() => {
+          interaction.deleteReply().catch(console.log);
+        }, 10000);
       } else if (commandName === "leave") {
         this.guildStateMap.get(interaction.guildId!)?.worker?.postMessage({ event: "leave" });
         console.log(
           `[${interaction.guild?.name}] Left VC (PlayingCount: ${this.guildStateMap.size})`
         );
-        await interaction.reply("ボイスチャンネルから退出しました。");
+        await interaction.reply({
+          content: "ボイスチャンネルから退出しました。",
+        });
+        setTimeout(() => {
+          interaction.deleteReply().catch(console.log);
+        }, 10000);
       }
     });
 
