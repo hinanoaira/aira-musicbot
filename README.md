@@ -173,7 +173,8 @@ npm start
 
 ## ライセンス
 
-This project is private.
+This project is MIT License.
+See [LICENSE](./LICENSE) for details.
 
 ## 貢献
 
