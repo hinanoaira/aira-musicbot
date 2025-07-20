@@ -209,11 +209,11 @@ export class AudioManager {
 
     // フィルターとマッピングを設定
     if (trackObj.length === 1) {
-      args.push("-af", "volume=-20dB", "-map", "0:a");
+      args.push("-af", "volume=-24dB", "-map", "0:a");
     } else {
       const filter =
         trackObj.map((_, index) => `[${index}:a:0]`).join("") +
-        `concat=n=${trackObj.length}:v=0:a=1[outa];[outa]volume=-20dB[out]`;
+        `concat=n=${trackObj.length}:v=0:a=1[outa];[outa]volume=-24dB[out]`;
       args.push("-filter_complex", filter, "-map", "[out]");
     }
 
