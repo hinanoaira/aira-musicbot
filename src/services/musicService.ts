@@ -10,20 +10,24 @@ export function getRandomItem(): TrackInfo | null {
   const libraryData = getLibraryData();
   if (libraryData.allTracksCount == 0) return null;
 
-  while (true) {
-    const artists = Object.keys(libraryData.artistMap);
-    const artistName = artists[Math.floor(Math.random() * artists.length)];
-    const albums = Object.keys(libraryData.artistMap[artistName]);
-    const albumName = albums[Math.floor(Math.random() * albums.length)];
-    const tracks = libraryData.artistMap[artistName][albumName];
-    const track = tracks[Math.floor(Math.random() * tracks.length)];
+  let totalValidTracks = 0;
+  let selectedTrack: TrackInfo | null = null;
 
-    if (track.SkipWhenShuffling === "1" || track.Love === "B") {
-      continue;
+  for (const artistName of Object.keys(libraryData.artistMap)) {
+    for (const albumName of Object.keys(libraryData.artistMap[artistName])) {
+      const tracks = libraryData.artistMap[artistName][albumName];
+      for (const track of tracks) {
+        if (track.SkipWhenShuffling !== "1" && track.Love !== "B") {
+          totalValidTracks++;
+          if (Math.random() < 1 / totalValidTracks) {
+            selectedTrack = track;
+          }
+        }
+      }
     }
-
-    return track;
   }
+
+  return selectedTrack;
 }
 
 export function sequenceTracks(track: TrackInfo): TrackInfo[] {
