@@ -9,6 +9,10 @@ import { spawn } from "child_process";
 import { TrackInfo } from "../../../types/index.js";
 import { ResourceMetadata } from "../types.js";
 import { parentPort } from "worker_threads";
+import { promisify } from "util";
+import { exec } from "child_process";
+
+const execAsync = promisify(exec);
 
 /**
  * オーディオ再生を管理するクラス
@@ -114,7 +118,7 @@ export class AudioManager {
       throw new Error("No tracks provided.");
     }
 
-    const args = this.buildFfmpegArgs(trackObj, bitrate);
+    const args = await this.buildFfmpegArgs(trackObj, bitrate);
 
     // HDDアクセス待ちを軽減するためのプロセス設定
     const ffmpegProcess = spawn("ffmpeg", args, {
@@ -160,7 +164,7 @@ export class AudioManager {
    * @param bitrate ビットレート（デフォルトは256kbps）
    * @returns FFMPEGの引数の配列
    */
-  private buildFfmpegArgs(trackObj: TrackInfo[], bitrate: number): string[] {
+  private async buildFfmpegArgs(trackObj: TrackInfo[], bitrate: number): Promise<string[]> {
     const args: string[] = [];
 
     // HDDアクセス待ちを軽減するためのバッファリング設定
@@ -202,18 +206,27 @@ export class AudioManager {
       );
     }
 
+    // リプレイゲインのアルバム値を取得（FLACファイルから直接読み取り、あれば使用、なければ0）
+    let albumGain = 0;
+    if (trackObj.length > 0) {
+      albumGain = await this.getAlbumGainFromFlac(trackObj[0]._relativePath.slice(3));
+    }
+
     // 入力ファイルを追加
     trackObj.forEach((track) => {
       args.push("-i", track._relativePath.slice(3));
     });
 
+    // ボリューム調整値を計算（基本の-dB + アルバムゲイン）
+    const volumeAdjustment = -18 + albumGain;
+
     // フィルターとマッピングを設定
     if (trackObj.length === 1) {
-      args.push("-af", "volume=-24dB", "-map", "0:a");
+      args.push("-af", `volume=${volumeAdjustment}dB`, "-map", "0:a");
     } else {
       const filter =
         trackObj.map((_, index) => `[${index}:a:0]`).join("") +
-        `concat=n=${trackObj.length}:v=0:a=1[outa];[outa]volume=-24dB[out]`;
+        `concat=n=${trackObj.length}:v=0:a=1[outa];[outa]volume=${volumeAdjustment}dB[out]`;
       args.push("-filter_complex", filter, "-map", "[out]");
     }
 
@@ -257,5 +270,45 @@ export class AudioManager {
    */
   getCurrentMetadata(): ResourceMetadata | null {
     return this.metadata;
+  }
+
+  /**
+   * FLACファイルからリプレイゲインのアルバム値を取得します。
+   * @param filePath FLACファイルのパス
+   * @returns リプレイゲインのアルバム値（dB）、見つからない場合は0
+   */
+  private async getAlbumGainFromFlac(filePath: string): Promise<number> {
+    try {
+      const { stdout } = await execAsync(
+        `ffprobe -v quiet -show_format -print_format json "${filePath}"`
+      );
+      const metadata = JSON.parse(stdout);
+
+      if (metadata.format && metadata.format.tags) {
+        const tags = metadata.format.tags;
+        // 各種リプレイゲインタグを確認
+        const albumGainValue =
+          tags.REPLAYGAIN_ALBUM_GAIN ||
+          tags.replaygain_album_gain ||
+          tags["ALBUM GAIN"] ||
+          tags["Album Gain"];
+
+        if (typeof albumGainValue === "string") {
+          // "+X.XX dB" や "X.XX dB" 形式から数値を抽出
+          const match = albumGainValue.match(/([+-]?\d+\.?\d*)/);
+          if (match) {
+            return parseFloat(match[1]) || 0;
+          }
+        }
+      }
+
+      return -10;
+    } catch (error) {
+      parentPort?.postMessage({
+        event: "log",
+        message: `Failed to read replay gain from ${filePath}: ${error}`,
+      });
+      return -10;
+    }
   }
 }
