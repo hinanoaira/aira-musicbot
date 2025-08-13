@@ -120,14 +120,8 @@ export class AudioManager {
 
     const args = await this.buildFfmpegArgs(trackObj, bitrate);
 
-    // HDDアクセス待ちを軽減するためのプロセス設定
     const ffmpegProcess = spawn("ffmpeg", args, {
       stdio: ["ignore", "pipe", "ignore"],
-      windowsVerbatimArguments: true,
-      env: {
-        ...process.env,
-        FFREPORT: "level=16",
-      },
     });
 
     ffmpegProcess.on("error", (error) => {
@@ -166,45 +160,6 @@ export class AudioManager {
    */
   private async buildFfmpegArgs(trackObj: TrackInfo[], bitrate: number): Promise<string[]> {
     const args: string[] = [];
-
-    // HDDアクセス待ちを軽減するためのバッファリング設定
-    args.push(
-      "-fflags",
-      "+genpts+igndts",
-      "-max_delay",
-      "5000000",
-      "-rtbufsize",
-      `${this.BUFFER_SIZE / (1024 * 1024)}M`
-    );
-
-    // OS別の最適化設定
-    if (process.platform === "linux") {
-      args.push(
-        "-thread_queue_size",
-        "4096",
-        "-analyzeduration",
-        "10000000",
-        "-probesize",
-        "20000000"
-      );
-    } else if (process.platform === "win32") {
-      args.push(
-        "-thread_queue_size",
-        "2048",
-        "-analyzeduration",
-        this.ANALYZE_DURATION.toString(),
-        "-probesize",
-        this.PROBE_SIZE.toString()
-      );
-    } else {
-      // macOS等のデフォルト設定
-      args.push(
-        "-analyzeduration",
-        this.ANALYZE_DURATION.toString(),
-        "-probesize",
-        this.PROBE_SIZE.toString()
-      );
-    }
 
     // リプレイゲインのアルバム値を取得（FLACファイルから直接読み取り、あれば使用、なければ0）
     let albumGain = 0;
